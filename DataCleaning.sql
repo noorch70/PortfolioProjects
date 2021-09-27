@@ -1,28 +1,28 @@
 --Data Source : https://github.com/noorch70/PortfolioProjects/blob/main/Nashville%20Housing%20Data%20for%20Data%20Cleaning%20(1).xlsx
 --DATACLEANING NASHVILLE HOUSING
 
---Standardizing date format (removing timestamp from date column in table)
+--Step1 : Standardizing date format (removing timestamp from date column in table)
 
  Select saleDate from DataCleaning..NashvilleHousing
 
 ALTER TABLE DataCleaning..NashvilleHousing
 ALTER COLUMN SaleDate Date;
 
---Filling out null property addresses
----1) On examining the table,it is found that same parcelIDs always delivered to similar addresses therefore by matching the parcelIDs 
----null property addresses are filled.
+--Step2: Filling out null property addresses
+
+--- On examining the table,it is found that same parcelIDs are always delivered to similar addresses therefore by matching the parcelIDs null property addresses are filled.
 SELECT parcelID,propertyAddress
 FROM DataCleaning..NashvilleHousing
 Order by ParcelID
 
----2)self joining the table on basis of same parcelIDs since all same parcels delivered to same property address
+---To fill null property addresses,table is self joined on basis of parcelIDs since all same parcels are delivered to same property addresses
 SELECT a.ParcelID,b.parcelID,a.propertyAddress,b.propertyAddress,ISNULL(a.PropertyAddress,b.propertyAddress)
 FROM DataCleaning..NashvilleHousing a
 join DataCleaning..NashvilleHousing b
 on a.ParcelID=b.ParcelID and a.[UniqueID ]<>b.[UniqueID ]
 WHERE a.propertyAddress is null
 
----3) Filling out the empty address
+--- Empty addresses are now filled
 
 UPDATE a
 SET PropertyAddress=ISNULL(a.PropertyAddress,b.propertyAddress)
@@ -33,22 +33,22 @@ WHERE
 a.propertyAddress is null
 
 
----4)Verifying if any null left in propertyAddress column
+---Verifying if any null left in propertyAddress column
 Select * from DataCleaning..NashvilleHousing
 where
 PropertyAddress is null
 
 
 
---Breaking out address(propertyAddress and ownerAddress) into indivisual columns (Address ,City ,State)
+--Step3 : Breaking out address(propertyAddress and ownerAddress) into indivisual columns (Address ,City ,State)
 
----1) slecting the required outputs first 
+--- Required outputs are selected first 
 
 SELECT SUBSTRING(propertyAddress,1,CHARINDEX(',',propertyAddress)) as Address,
 SUBSTRING(propertyAddress,CHARINDEX(',',propertyAddress)+1,len(PropertyAddress)) as town
 from DataCleaning..NashvilleHousing
 
----2) Now adding two more columns : PropertySplitAddress and PropertySplitCiy
+--- Adding two new ccolumns : PropertySplitAddress and PropertySplitCiy
 
 ALTER TABLE DataCleaning..NashvilleHousing
 Add PropertySplitAddress varchar(255);
@@ -56,19 +56,22 @@ Add PropertySplitAddress varchar(255);
 ALTER TABLE DataCleaning..NashvilleHousing
 Add PropertySplitCity varchar(255);
 
+---Splitting Property Address and City
 Update DataCleaning..NashvilleHousing
 Set PropertySplitAddress=SUBSTRING(propertyAddress,1,CHARINDEX(',',propertyAddress)-1);
 
 Update DataCleaning..NashvilleHousing
 Set PropertySplitCity=SUBSTRING(propertyAddress,CHARINDEX(',',propertyAddress)+1,len(PropertyAddress))
 
----3)Now verifying the PropertyAddress Columns
+---Now verifying the PropertyAddress Columns
 SELECT PropertySplitAddress,PropertySplitCity
 from DataCleaning..NashvilleHousing
 
----4)Now  examining OwnerAddress columns
+---Now  examining OwnerAddress columns
 Select OwnerAddress from 
 DataCleaning..NashvilleHousing
+
+---OwnerAddress column split into Address,City and State using PARSENAME functions.
 
 select PARSENAME(REPLACE(OwnerAddress,',','.'),3),
 PARSENAME(REPLACE(OwnerAddress,',','.'),2),
@@ -93,9 +96,9 @@ SET OwnerSplitState=PARSENAME(REPLACE(OwnerAddress,',','.'),1)
 
 SELECT * FROM DataCleaning..NashvilleHousing
 
--------change Y and N to yes and No in "sold as vacant"---------------------------
+--Step4: Changing Y and N to yes and No in "sold as vacant"
 
---checking the entries first
+---checking the entries first
 SELECT DISTINCT(SoldAsVacant),count(SoldAsVacant)
 FROM
 DataCleaning..NashvilleHousing
@@ -103,7 +106,7 @@ GROUP BY SoldAsVacant
 Order by 2
 
 
---Now checking required output
+---Now checking required output
 
 SELECT SoldAsVacant,
 
@@ -113,7 +116,7 @@ CASE WHEN SoldAsVacant = 'Y' then 'Yes'
 	  END
 FROM DataCleaning..NashvilleHousing
 
---Updating the table now
+---Updating the table now
 UPDATE DataCleaning..NashvilleHousing
 SET SoldAsVacant=
 CASE WHEN SoldAsVacant = 'Y' then 'Yes'
@@ -122,7 +125,7 @@ CASE WHEN SoldAsVacant = 'Y' then 'Yes'
 	  END
 FROM DataCleaning..NashvilleHousing
 
---Now checking if chanes are in place
+---Now checking if changes are in place
 SELECT DISTINCT(SoldAsVacant),count(SoldAsVacant)
 FROM
 DataCleaning..NashvilleHousing
@@ -131,8 +134,8 @@ Order by 2
 
 
 
-----------Remove Duplicates----------
-
+--Step5 : Removing Duplicates
+---Duplicates will be identified using ROW_NUMBER after partitioning by Parcel ID,Sale date and price and legal reference number
 WITH row_numCTE AS ( 
 SELECT *,
   ROW_NUMBER() 
@@ -156,7 +159,7 @@ row_num>1
  
 
 
- -----------DELETING UNUSED COLUMNS
+ --Step6 : Deleting unused columns
 SELECT *
 FROM 
 DataCleaning.dbo.NashvilleHousing
