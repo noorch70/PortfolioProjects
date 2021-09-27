@@ -1,24 +1,26 @@
-#link to dashboard : https://public.tableau.com/app/profile/noor.fatima/viz/CovidDashboard-AutomatedDailyRefresh/Dashboard1
+# link to dashboard : https://public.tableau.com/app/profile/noor.fatima/viz/CovidDashboard-AutomatedDailyRefresh/Dashboard1
+# Step1 : Importing libraries and latest Covid data into dataframe from ourworldindata.org.
 from datetime import datetime
 start_time = datetime.now()
 import pandas as pd
 from pandas import Series,DataFrame
 covid_data = pd.read_csv('https://covid.ourworldindata.org/data/owid-covid-data.csv')
-#extracting covid_deaths and covid_vaccinations dataframes from covid_data dataframe
+# Step2 : Extracting covid_deaths and covid_vaccinations dataframes from 'covid_data' dataframe.Columns which are not part of the analysis will be filtered out in this step.
 covid_deaths=pd.concat([covid_data.iloc[:,0:4],covid_data.iloc[:,46],covid_data.iloc[:,4:25]],axis=1)
 covid_vaccinations=pd.concat([covid_data.iloc[:,0:4],covid_data.iloc[:,25:]],axis=1)
-# Save them as csv
+# Step3 : Save the filtered dataframes as csv files
 covid_deaths.to_csv('D:\data analytics\covid19_dashboard\covid_deaths.csv',index = False)
 covid_vaccinations.to_csv('D:\data analytics\covid19_dashboard\covid_vaccinations.csv',index = False)
-#opening connection to SQL
+# Step4 : Connection is established to SQL Server using pyodbc 
 import pyodbc 
+# Passing  in the names of server and name of database
 conn = pyodbc.connect('Driver={SQL Server Native Client 11.0};'
                       'Server=DESKTOP-URQRB3Q\SQLEXPRESS;'
                       'Database=Covid19_data;'
                       'Trusted_Connection=yes;'  ) 
     
-# Pass in the names of server and name of database
 
+#Step5 : Creating tables 'Covid_deaths' and 'Covid_vaccinations' in SQL database.The latest data is imported from 'ourworldindata.org' daily.Old tables are dropped and new tables are created everytime with latest data. 
 cursor = conn.cursor()
 import_covid_deaths='''
 USE [Covid19_data];
@@ -132,7 +134,8 @@ WITH(FORMAT ='CSV',FIRSTROW = 2)
 '''
 cursor.execute(import_covid_vaccinations)
 conn.commit()
-#now executing queries in these tables created
+# Step6 :4 queries will be executed from these tables and stored in dataframes using pandas. 
+#Getting total covid cases and total deaths globally 
 query1 = '''
 SELECT 
     SUM(new_cases) AS total_cases, 
@@ -145,6 +148,7 @@ ORDER BY 1,2;
 # Run the query and save the output to a dataframe
 table1 = pd.read_sql_query(query1,conn) # pass in the query, and the connection
 
+#Getting covid deaths and cases in different continents of the world
 query2 = '''
 SELECT location ,  sum(cast(new_deaths as int)) as total_deaths
 
@@ -157,6 +161,7 @@ order by total_deaths desc
 
 '''
 table2 = pd.read_sql_query(query2,conn)
+#Getting hightest infection count from different countries todate.Maximum of all the cases reported daily will be selected for each country.(achieved using Group by location and population)
 query3='''
 SELECT
  location,population, max(total_cases) as HighestInfectionCount,(Max(total_cases)/population)*100 as PercentPopulationInfected
@@ -167,6 +172,7 @@ order by PercentPopulationInfected desc
 '''
 table3 = pd.read_sql_query(query3,conn)
 table3 = table3.fillna(0)
+#Daily infection count is recorded for each country.Because of large amount of data, timeline of infection count for only few countries will be represented visually.
 query4='''
 SELECT
  location,date,population, max(total_cases) as HighestInfectionCount,(Max(total_cases)/population)*100 as PercentPopulationInfected
@@ -178,7 +184,7 @@ order by PercentPopulationInfected desc
 table4 = pd.read_sql_query(query4,conn)
 table4 = table4.fillna(0)
 
-# Connect to Google Sheets using pygsheets library with credentials
+# Step7 : Since our aim is automatic refresh of data in Tableau, we will export these 4 dataframes in Google Sheets using pygsheets library
 import pygsheets
 creds = r"C:\Users\Noor Fatima\Downloads\credential.json" #pass in the key json file
 api = pygsheets.authorize(service_file=creds)
@@ -202,7 +208,7 @@ sheet4= wb.worksheet_by_title(f'Sheet4')
 # Write table4 into Sheet4
 sheet4.set_dataframe(table4, (1,1)) #specify the position, (1,1) means A1 - the first cell
 
-#adding timelog 
+# Step8 : Adding timelog in Goolge sheets and also generating a timelog text document so that we have information on latest time the data is refreshed. 
 end_time = datetime.now()
 elapsed_time = end_time - start_time
 
@@ -216,6 +222,7 @@ runtime_message = 'Runtime: ' + str(elapsed_time) + '\n'+ "*"*50 + '\n'
 table5 = pd.DataFrame.from_dict({'last_update':[time,date]})
 sheet5 = wb.worksheet_by_title(f'Sheet5')
 sheet5.set_dataframe(table5, (1,1))
+
 
 with open('update_log.txt','a') as file:
     file.write(datetime_message+runtime_message)
